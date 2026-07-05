@@ -102,10 +102,17 @@ body { font-family: 'Cairo', sans-serif; background: var(--base); color: var(--t
 .pg-stats svg { width: 14px; height: 14px; }
 .pg-content { font-family: var(--ff-main); font-size: calc(1.2rem * var(--f-mult)); line-height: var(--lh-mult); color: var(--text); text-align: var(--align); overflow-wrap: break-word; transition: font-size var(--trans), line-height var(--trans); }
 .pg-content mark { background: var(--accent-bg); color: var(--accent); padding: 0 4px; border-radius: 4px; font-weight: bold; }
-.fmt-h { font-size: 1.25em; font-weight: 700; color: var(--text); margin: 1.5em 0 0.5em; font-family: 'Cairo', sans-serif; }
-.fmt-p { margin-bottom: 0.75em; }
-.fmt-ul { margin-bottom: 1em; padding-inline-start: 1.5em; }
-.fmt-ul li { margin-bottom: 0.4em; }
+.fmt-h { font-size: 1.4em; font-weight: 800; color: var(--text); margin: 0 0 0.8em; line-height: 1.4; font-family: 'Cairo', sans-serif; }
+.fmt-h2 { font-size: 1.05em; font-weight: 700; color: var(--accent); margin: 1.6em 0 0.7em; padding-inline-start: 14px; border-inline-start: 3px solid var(--accent); line-height: 1.5; font-family: 'Cairo', sans-serif; }
+.fmt-h2:first-child { margin-top: 0; }
+.fmt-p { margin-bottom: 0.9em; }
+.fmt-ul { margin: 0 0 1.1em; padding-inline-start: 1.5em; display: flex; flex-direction: column; gap: 0.55em; }
+.fmt-ul li::marker { color: var(--accent); font-weight: 700; }
+.fmt-card { display: flex; gap: 16px; align-items: flex-start; background: var(--surface-hover); border: 1px solid var(--border); border-radius: var(--r-md); padding: 18px 20px; margin-bottom: 16px; }
+.fmt-card-num { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-bg); color: var(--accent); font-weight: 800; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; margin-top: 0.15em; }
+.fmt-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.fmt-card-line { padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
+.fmt-card-line:last-child { border-bottom: none; padding-bottom: 0; }
 .en-text { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; direction: ltr; unicode-bidi: embed; color: var(--text-muted); }
 .pg-foot { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
 .f-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-family: 'Cairo', sans-serif; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; }
@@ -327,7 +334,14 @@ const sv = () => localStorage.setItem('appSt_v6', JSON.stringify(st));
 const eId = i => document.getElementById(i);
 const qAll = s => document.querySelectorAll(s);
 const norm = s => s ? s.replace(/[آأإ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[ً-ٰٟ]/g,'').replace(/\s+/g,' ').trim() : '';
-const fData = PAGES.map((c,i)=>({ id:i, p:i+1, c:c, n:norm(c) }));
+const stripFooterNum = (txt, n) => {
+let lines = txt.split('\n'); let end = lines.length - 1;
+while(end >= 0 && lines[end].trim() === '') end--;
+if(end >= 0 && lines[end].trim() === String(n)) { lines.length = end; while(lines.length && lines[lines.length-1].trim() === '') lines.pop(); }
+return lines.join('\n');
+};
+const CPAGES = PAGES.map((t,i) => stripFooterNum(t, i+1));
+const fData = CPAGES.map((c,i)=>({ id:i, p:i+1, c:c, n:norm(c) }));
 const f = new Fuse(fData, { keys:['n'], includeMatches:true, threshold:0.35, distance:400, minMatchCharLength:2, ignoreLocation:true, getFn:(o,p)=>p[0]==='n'?o.n:o[p[0]] });
 const tot = Math.max(1, PAGES.length);
 const arN = n => st.l === 'en' ? n : String(n).replace(/\d/g, d=>'٠١٢٣٤٥٦٧٨٩'[d]);
@@ -361,24 +375,95 @@ if(!w.length) return t;
 let pat = w.map(x=>x.split('').map(c=>escR(c)).join('.{0,2}')).join('|');
 return t.replace(new RegExp(`(?![^<]*>)(${pat})`,'gi'), '<mark>$1</mark>');
 }
+const ORD_WORDS = ['اولا','ثانيا','ثالثا','رابعا','خامسا','سادسا','سابعا','ثامنا','تاسعا','عاشرا'];
+const LIST_RE = /^(?:[•*]\s*|-\d+\s*|\.\d+\s*|\d+[.\-\)]\s*|-\s+|[أ-ي][.\)]\s+|[a-zA-Z][.\)]\s+)/;
+const BARE_NUM_RE = /^\d{1,3}$/;
+const LONE_BULLET_RE = /^[•*\-]$/;
+const END_PUNCT_RE = /[.,،؛]$/;
+function isOrdinal(t) {
+if(t.length >= 90) return false;
+let n = norm(t);
+return ORD_WORDS.some(w => n.startsWith(w));
+}
+function mergeLoneBullets(lines) {
+let out = []; let i = 0;
+while(i < lines.length) {
+let t = lines[i].trim();
+if(LONE_BULLET_RE.test(t)) {
+let j = i + 1;
+while(j < lines.length && lines[j].trim() === '') j++;
+if(j < lines.length && lines[j].trim() !== '') { out.push('• ' + lines[j].trim()); i = j + 1; continue; }
+}
+out.push(lines[i]); i++;
+}
+return out;
+}
+function classifyPage(txt) {
+let rawLines = txt.split('\n').map(l => l.trim());
+let lines = mergeLoneBullets(rawLines);
+let out = []; let prevBlank = true, lastKind = null, firstSeen = false, mode = 'NORMAL';
+for(let i = 0; i < lines.length; i++) {
+let t = lines[i];
+if(t === '') { prevBlank = true; continue; }
+let boundary = prevBlank || lastKind === 'H1' || lastKind === 'H2' || lastKind === null;
+let isFirst = !firstSeen; firstSeen = true;
+let isBareNum = BARE_NUM_RE.test(t);
+let isList = LIST_RE.test(t);
+let isOrd = isOrdinal(t);
+let isHeaderCand = boundary && t.length < 70 && !END_PUNCT_RE.test(t) && !isList && !isBareNum;
+let kind;
+if(isFirst && (isList || isBareNum) && t.length < 60) { kind = 'H1'; mode = 'NORMAL'; }
+else if(isBareNum && boundary) { kind = 'CARD_START'; mode = 'CARD'; }
+else if(mode === 'CARD') { if(isOrd) { kind = 'H2'; mode = 'NORMAL'; } else kind = 'CARD_FIELD'; }
+else if(isOrd) kind = 'H2';
+else if(isHeaderCand) kind = isFirst ? 'H1' : 'H2';
+else if(isList) kind = 'LI';
+else kind = 'P';
+out.push({ kind, text: t, ord: isOrd });
+lastKind = kind; prevBlank = false;
+}
+let j = 0;
+while(j < out.length) {
+if(out[j].kind === 'H2' && !out[j].ord) {
+let k = j;
+while(k < out.length && out[k].kind === 'H2' && !out[k].ord) k++;
+if(k - j >= 3) for(let m = j; m < k; m++) out[m].kind = 'P';
+j = k;
+} else j++;
+}
+return out;
+}
+function decorate(t) {
+return esc(t).replace(/([a-zA-Z0-9\-\.\+\_\/]{2,})/g, '<span class="en-text">$1</span>');
+}
 function formatText(txt, q='') {
-let lines = txt.split('\n'); let out = '', inList = false;
-lines.forEach(l => {
-let t = l.trim();
-if(!t) { if(inList){ out+='</ul>'; inList=false; } out+='<br>'; return; }
-let isLi = /^[\-\*•]\s|^\d+\.\s/.test(t);
-if(isLi) {
-if(!inList) { out+='<ul class="fmt-ul">'; inList=true; }
-let c = esc(t.replace(/^[\-\*•]\s|^\d+\.\s/, '')).replace(/([a-zA-Z0-9\-\.\+\_\/]{2,})/g, '<span class="en-text">$1</span>');
-out += `<li>${hl(c, q)}</li>`;
+let blocks = classifyPage(txt);
+let out = '', inList = false, inCard = false;
+const closeList = () => { if(inList) { out += '</ul>'; inList = false; } };
+const closeCard = () => { if(inCard) { out += '</div></div>'; inCard = false; } };
+blocks.forEach(b => {
+let { kind, text } = b;
+if(kind === 'LI') {
+closeCard();
+if(!inList) { out += '<ul class="fmt-ul">'; inList = true; }
+let stripped = text.replace(LIST_RE, '');
+out += `<li>${hl(decorate(stripped), q)}</li>`;
+} else if(kind === 'CARD_START') {
+closeList(); closeCard();
+out += `<div class="fmt-card"><div class="fmt-card-num">${esc(st.l==='ar'?arN(text):text)}</div><div class="fmt-card-body">`;
+inCard = true;
+} else if(kind === 'CARD_FIELD') {
+closeList();
+if(!inCard) { out += `<div class="fmt-card"><div class="fmt-card-num">·</div><div class="fmt-card-body">`; inCard = true; }
+out += `<div class="fmt-card-line">${hl(decorate(text), q)}</div>`;
 } else {
-if(inList) { out+='</ul>'; inList=false; }
-let isH = t.length < 80 && !/[.،,]$/.test(t);
-let c = esc(t).replace(/([a-zA-Z0-9\-\.\+\_\/]{2,})/g, '<span class="en-text">$1</span>');
-out += `<div class="${isH?'fmt-h':'fmt-p'}">${hl(c, q)}</div>`;
+closeList(); closeCard();
+if(kind === 'H1') out += `<div class="fmt-h">${hl(decorate(text), q)}</div>`;
+else if(kind === 'H2') out += `<div class="fmt-h2">${hl(decorate(text), q)}</div>`;
+else out += `<div class="fmt-p">${hl(decorate(text), q)}</div>`;
 }
 });
-if(inList) out+='</ul>';
+closeList(); closeCard();
 return out;
 }
 function getCh(p) { let c=null; for(let i=0;i<CHAPTERS.length;i++){ if(CHAPTERS[i].page<=p) c=CHAPTERS[i]; else break; } return c; }
@@ -390,7 +475,7 @@ let outC = dir > 0 ? (r?'sl-out-r':'sl-out-l') : (dir < 0 ? (r?'sl-out-l':'sl-ou
 let inC = dir > 0 ? (r?'sl-in-l':'sl-in-r') : (dir < 0 ? (r?'sl-in-r':'sl-in-l') : 'animating');
 const wrp = eId('pgWrap'); wrp.className = `page ${outC}`;
 setTimeout(() => {
-const c = PAGES[p-1], ch = getCh(p);
+const c = CPAGES[p-1], ch = getCh(p);
 eId('pgBd').textContent = `${st.l==='en'?'Page':'صفحة'} ${arN(p)}`;
 eId('pgCh').textContent = ch ? ch.title : '';
 let wc = c.trim().split(/\s+/).length; let rt = Math.ceil(wc/200);
@@ -436,12 +521,12 @@ qAll('[data-f]').forEach(b=>b.onclick=()=>{st.ff=b.dataset.f;sv();apF();}); qAll
 function togLang(){ st.l=st.l==='ar'?'en':'ar'; sv(); apL(); bldNav(); rPage(st.p); }
 eId('bLang').onclick = togLang;
 function apL(){ document.documentElement.lang = st.l; document.documentElement.dir = st.l === 'ar' ? 'rtl' : 'ltr'; qAll('[data-i18n]').forEach(e => { e.textContent = UIDict[st.l][e.dataset.i18n] || e.textContent; }); eId('cmdInp').placeholder = UIDict[st.l].cmdpl; }
-async function cpyP(){ if(!PAGES[st.p-1]) return; try{ await navigator.clipboard.writeText(PAGES[st.p-1]); showTst(UIDict[st.l].cop); }catch(e){} }
+async function cpyP(){ if(!CPAGES[st.p-1]) return; try{ await navigator.clipboard.writeText(CPAGES[st.p-1]); showTst(UIDict[st.l].cop); }catch(e){} }
 eId('bPgCpy').onclick = cpyP;
 eId('bPgBm').onclick = () => { if(!PAGES.length) return; let i=st.bm.indexOf(st.p); if(i>-1)st.bm.splice(i,1); else st.bm.push(st.p); sv(); eId('bPgBm').classList.toggle('active',st.bm.includes(st.p)); };
 eId('bPgShr').onclick = async () => { try { await navigator.clipboard.writeText(location.origin+location.pathname+`#p=${st.p}`); showTst(UIDict[st.l].cpl); }catch(e){} };
 let spk=null;
-eId('bSpk').onclick = () => { if(!PAGES[st.p-1]) return; if(speechSynthesis.speaking){speechSynthesis.cancel();eId('bSpk').classList.remove('active');return;} spk=new SpeechSynthesisUtterance(PAGES[st.p-1]); spk.lang=st.l==='ar'?'ar-SA':'en-US'; spk.onend=()=>eId('bSpk').classList.remove('active'); speechSynthesis.speak(spk); eId('bSpk').classList.add('active'); };
+eId('bSpk').onclick = () => { if(!CPAGES[st.p-1]) return; if(speechSynthesis.speaking){speechSynthesis.cancel();eId('bSpk').classList.remove('active');return;} spk=new SpeechSynthesisUtterance(CPAGES[st.p-1]); spk.lang=st.l==='ar'?'ar-SA':'en-US'; spk.onend=()=>eId('bSpk').classList.remove('active'); speechSynthesis.speak(spk); eId('bSpk').classList.add('active'); };
 const sTip=eId('selTip');
 document.addEventListener('selectionchange', () => { const s=window.getSelection(); if(s.isCollapsed||!s.toString().trim()){sTip.classList.remove('show');return;} const r=s.getRangeAt(0).getBoundingClientRect(); sTip.style.top=`${r.top-40}px`; sTip.style.left=`${r.left+r.width/2}px`; sTip.classList.add('show'); });
 sTip.onclick = async () => { try{await navigator.clipboard.writeText(window.getSelection().toString());showTst(UIDict[st.l].cop);}catch(e){} window.getSelection().removeAllRanges(); sTip.classList.remove('show'); };
